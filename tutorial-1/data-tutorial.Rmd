@@ -1,0 +1,297 @@
+
+
+# DATA419 Tutorial
+# Name: Feng Wang
+# Student ID: 37115208
+
+&nbsp;
+
+# Social network
+This tutorial is about 'tweet' network. We use twitter API to search a key word
+to build network. We end up with graphs that show the relationship between the 
+two nodes (user_id and status_id).
+
+&nbsp;
+
+## Installing packages we need
+We need to install some packages to support our analysis
+```{r}
+
+```
+```{r}
+library(tidyverse)
+library(tidygraph)
+library(igraph)
+library(ggraph)
+```
+
+
+## Searching tweets
+We can use {rtweet} to search and download data about Tesla.
+
+```{r}
+library(rtweet)
+api_key <- 'iOsRlTvxgT2FRQgJC8MUL34w2'
+api_secret_key <- 'k1dlDeAUUws2KcmAXq49R2x9ALKnOXyfhAeQOYRE9QKhd5Fjiq'
+bearer_token <- 'AAAAAAAAAAAAAAAAAAAAALCndAEAAAAAH7ePVnYa4M6OVtBdb0RwCSvIVDQ%3DocaUDYhGYSwcNt2fEcikZaK1bHsKlRoE0um9hWQMWjCxxQjpdS-3VbQQP5VPp3JVj58VilKWOsUr6SZ2N'
+
+
+get_token()
+
+tesla_tweets <- search_tweets(
+      q = "#tesla", #q is the query
+      n = 7000, #n is how many
+      include_rts = FALSE #we only want originals
+)
+
+```
+
+
+Let's see what we have got.
+```{r}
+tesla_tweets %>%
+  glimpse()
+
+```
+There are 6920 rows and 90 columns.
+
+&nbsp;
+
+We can create a rough graph of how many tweets we collect every day.
+```{r}
+ts_plot(tesla_tweets, "hours") + theme_minimal() #it produces a ggplot plot
+
+```
+
+&nbsp;
+
+We can use the users function to find out who's the most followed account that has tweeted
+about tesla in our collection
+```{r}
+tesla_tweets %>%
+  users_data() %>%
+  arrange(desc(followers_count)) %>%
+  unique()
+```
+
+
+We can plot the distribution of the amount of followers of our accounts
+```{r}
+tesla_tweets %>%
+  users_data %>%
+  arrange(desc(followers_count)) %>%
+  unique() %>%
+  ggplot(aes(x=followers_count)) +
+    geom_histogram(bins=30) +
+    scale_y_sqrt() +
+    theme_minimal()
+```
+
+
+## Build the network
+We will build the network based on the user and status variables, and then need to filter out some invalid data. We will use two function 'select' and 'rename' and change the name of the two variables.
+```{r}
+new_tesla <- tesla_tweets %>%
+  filter(!is.na(user_id),
+         !is.na(reply_to_status_id)) %>%
+  select(user_id, reply_to_status_id) %>% #select column we need
+  rename(to=user_id,from=reply_to_status_id) #change name
+
+new_tesla %>%
+  count(to) %>%
+  arrange(desc(n)) %>% #arrange by n in descending order
+  top_n(5,n) #get the first 5, according to n
+
+```
+
+
+## Degree distribution
+
+We can take a plot that is abou empirical distribution of the degree.
+```{r}
+new_tesla %>%
+  count(to) %>%
+  ggplot()+geom_histogram(aes(x=n),binwidth = 1)
+
+```
+
+
+## Igraph network
+
+```{r}
+new_tesla1 <- new_tesla %>%
+  full_join(new_tesla, by = "from") %>% #we are full joining links with links, and connecting them via the column from
+  filter(to.x != to.y)  %>% #we don't care about self links
+  select(-from) %>% #we only care about the astronauts,not the missions now
+  rename(from = to.x, to = to.y) #and we still want the from and to names for the columns
+new_tesla1 <- new_tesla1[, c('from','to')]
+new_tesla1
+```
+
+Now, we can use new dataframe to build our new network and plot it.
+```{r}
+new_tesla2 <- new_tesla1 %>%
+  graph_from_data_frame(directed = FALSE)
+new_tesla2 %>% plot() #plot
+```
+
+It looked very confused. We try to find useful information from it
+
+&nbsp;
+
+We are trying to use igraph to test if the graph is connected, this will help us with our analysis
+```{r}
+new_tesla2
+new_tesla2 %>% is.connected()
+```
+
+
+
+## Tidygraph
+```{r}
+tidy_tesla <- new_tesla2 %>%
+  as_tbl_graph() %>% #this transforms an igraph object in to a tidygraph object
+  mutate(degree = centrality_degree()) #centrality_degree() computes the degree of the nodes in the network
+tidy_tesla
+```
+There are 234 nodes and 6326 edges.
+
+
+```{r}
+new_tidy_tesla <- tidy_tesla %>%
+  filter(degree > 300) %>%
+  ggraph(layout = "stress") + #the layout decides the placement of the nodes on the screen
+  geom_edge_link() + #how we draw the links
+  geom_node_label(aes(label=name), repel =  TRUE) + #how we draw the nodes
+  theme_graph() #an overall theme for the plot
+new_tidy_tesla
+
+
+```
+
+&nbsp;
+
+We can see from the figure that many nodes have many branches
+
+&nbsp;
+
+```{r}
+new2_tidy_tesla <- tidy_tesla %>%
+  filter(degree < 300 & degree > 60) %>%
+  ggraph(layout = "stress") +
+  geom_edge_link() +
+  #geom_node_label(aes(label=name), repel =  TRUE) +
+  theme_graph()
+new2_tidy_tesla
+
+
+```
+
+
+## Degree distribution
+```{r}
+tidy_tesla %>%
+  as_tibble() %>%
+  ggplot() +
+  geom_histogram(aes(x=degree),binwidth = 10)
+
+
+```
+
+
+
+
+
+
+## Subgraph
+
+```{r}
+tidy_tesla_subgraph <- tidy_tesla %>%
+  filter(degree>60 &degree<300)
+```
+Adjacency list:
+```{r}
+tidy_tesla_subgraph %>% 
+  as_adj_list()
+```
+Edge list:
+```{r}
+tidy_tesla_subgraph %>%
+  as_edgelist()
+```
+Adjacency matrix:
+```{r}
+tidy_tesla_subgraph %>%
+  as_adjacency_matrix(sparse = FALSE)
+
+```
+From the results we can see that the matrix is dense rather than sparse and the sparse representation is a lighter approach because it does not retain any zeros
+If the subnet is hte entire network,we can use many different functions to calculate the global topological properties of the graph
+
+## Topological properties
+We can measure topological properties at a global or local level. I'm going to use this igraph to figure out the properties
+```{r}
+tidy_tesla_subgraph %>% #the long shortest path between two nodes
+  diameter()
+```
+Girth:
+```{r}
+tidy_tesla_subgraph %>% #the length of the shortest circle
+  girth()
+```
+Radius:
+```{r}
+tidy_tesla_subgraph %>% #the length of the shortest circle
+  radius()
+```
+Clustering index:
+```{r}
+tidy_tesla_subgraph %>% #the clustering coefficient
+  transitivity()
+```
+
+
+## Random network model
+In {tidygraph}, we will use one of the functions of family 'play_' to extract a random network.
+You can then see a list of all available random network models.
+```{r}
+set.seed(Sys.time()) #the random seed
+play_erdos_renyi(n=10,m=30) %>%
+  ggraph(layout="stress") +
+  geom_node_point() +
+  geom_edge_link() +
+  theme_graph()
+```
+
+## Compare model
+```{r}
+sampled <- replicate(
+  n=1000, # how many times
+  expr = tidy_tesla_subgraph %>% #what function to replicate
+    degree() %>% #we computer the observed degrees
+    play_degree() %>%
+    transitivity()
+)
+
+```
+We are going to create a histogram of sampled values using {ggplot} which shows one observed value of the clustering index and 1000 sampled values of clustering index.
+```{r}
+sampled %>%
+  tibble(transitivity=.) %>%
+  ggplot(aes(x=transitivity)) +
+           geom_histogram(bins=70) +
+           geom_vline(xintercept = tidy_tesla_subgraph %>% transitivity(),
+                      color = 'blue',
+                      size=4) +
+           theme_minimal()
+
+```
+
+&nbsp;
+
+The clustering coeffcient values of the model we chose are quite different from those observed. This shows that the degree sequence of all these networks is the same, and a fixed degree sequence is not a good choice for our network.
+
+
+
+
+
