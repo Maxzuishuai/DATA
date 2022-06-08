@@ -31,9 +31,6 @@ We can use {rtweet} to search and download data about Tesla.
 
 ```{r}
 library(rtweet)
-api_key <- 'iOsRlTvxgT2FRQgJC8MUL34w2'
-api_secret_key <- 'k1dlDeAUUws2KcmAXq49R2x9ALKnOXyfhAeQOYRE9QKhd5Fjiq'
-bearer_token <- 'AAAAAAAAAAAAAAAAAAAAALCndAEAAAAAH7ePVnYa4M6OVtBdb0RwCSvIVDQ%3DocaUDYhGYSwcNt2fEcikZaK1bHsKlRoE0um9hWQMWjCxxQjpdS-3VbQQP5VPp3JVj58VilKWOsUr6SZ2N'
 
 
 get_token()
